@@ -51,15 +51,31 @@ function Get-CippMcpToolCatalog {
                 if ($Method -eq 'get' -and $PathEntry.Value.Contains('post')) { continue }
 
                 $Op = $MethodEntry.Value
-                $Role = $Op['x-cipp-role']
+               # MCP write policy.
+# Read operations remain available as normal.
+# Write operations must be explicitly listed here.
+$AllowedWriteEndpoints = @(
+    # Add exact CIPP endpoint names here, for example:
+    # 'ResetUserPassword'
+    # 'RevokeUserSessions'
+)
 
-                # Read-only surface only.
-                if (-not $Role -or $Role -notmatch '\.Read$') { continue }
+$Role = $Op['x-cipp-role']
 
-                # Defensive backstop: never expose an endpoint whose name implies a mutation,
-                # even if its x-cipp-role is mislabeled '.Read' (e.g. AddTestReport, EditIntunePolicy).
-                if ($Endpoint -match '^(Add|Set|Remove|Delete|Edit|New|Update|Disable|Enable|Reset|Revoke|Push|Clear|Start|Stop|Rename|Move|Copy)') { continue }
+$IsRead = $Role -match '\.Read$'
+$IsAllowedWrite = $Endpoint -in $AllowedWriteEndpoints
 
+# Only expose normal read operations or explicitly permitted write operations.
+if (-not $IsRead -and -not $IsAllowedWrite) {
+    continue
+}
+
+# Defensive backstop: mutation-style endpoints must be explicitly allowlisted.
+$LooksMutating = $Endpoint -match '^(Add|Set|Remove|Delete|Edit|New|Update|Disable|Enable|Reset|Revoke|Push|Clear|Start|Stop|Rename|Move|Copy)'
+
+if ($LooksMutating -and -not $IsAllowedWrite) {
+    continue
+}
                 $Properties = [ordered]@{}
                 $RequiredList = [System.Collections.Generic.List[string]]::new()
 
